@@ -1,0 +1,618 @@
+---
+title: "House Price Prediction"
+output: html_document
+date: "2023-05-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(corrgram)
+library(corrplot)
+library(ggcorrplot)
+library(MLmetrics)
+library(lmtest)
+library(car)
+
+```
+```{r}
+data<- read.csv("all_perth_310121.csv", header = TRUE, na = "NULL")
+# Overview of the dataset's structure
+
+# Dimensions of the dataset (number of rows and columns)
+dim(data)
+
+# View the first few rows
+head(data)
+```
+```{r}
+# Summary statistics of the variables
+summary(data)
+```
+
+```{r}
+ggplot(data,aes(y=PRICE))+geom_boxplot()+scale_y_continuous(limits=c(0,2000000))
+
+ggplot(data,aes(x=PRICE))+geom_histogram(fill="steelblue",color="black",bins = 30)+
+  labs(title = "Histogram of housing price")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+```{r}
+boxplot(data$PRICE ~ data$BEDROOMS, main = "Price per Bedrooms",ylab = "PRICE", xlab = "NO. of BEDROOMS",col="red",las=0.8)
+```
+```{r}
+# Find columns with duplicate values
+duplicate_cols <- apply(data, 2, function(x) any(duplicated(x)))
+
+# Get column names with duplicate values
+duplicate_col_names <- names(data)[duplicate_cols]
+duplicate_col_names
+
+# Remove duplicated rows based on the 'ADDRESS' column
+data <- data[!duplicated(data$ADDRESS), ]
+
+dim(data)
+summary(data)
+
+```
+
+
+
+```{r}
+col<-sapply(data, is.character)
+col
+
+#Returns column names with character data type
+character_columns <- names(data)[col]
+character_columns
+
+#Returns the position of the categorical column
+column_positions <- which(names(data) %in% character_columns)
+column_positions
+
+#Subsetting data frame into numeric data frame
+house_df_num<-data[,-c(column_positions)]
+
+#Removing the column with zero affect in modeling
+house_df_num<-house_df_num[,-c(7,11,12,14)]
+
+str(house_df_num)
+
+```
+```{r}
+#Cleaning
+
+#Remove rows with incorrect prices.
+
+idx <- which(house_df_num$price %in% c(0))
+idx
+
+#No incorrect prices
+
+```
+
+```{r}
+# Calculate the mean of the nearest five values for each NA value
+library(zoo)
+
+# Convert the GARAGE column to a zoo object
+zoo_garage <- zoo(house_df_num$GARAGE)
+
+# Fill NA values with the mean of nearest non-NA values
+filled_garage <- na.aggregate(zoo_garage, FUN = mean, maxgap = 5)
+
+# Assign the filled values back to the GARAGE column
+house_df_num$GARAGE <- as.integer(filled_garage)
+
+# Print the updated GARAGE column
+print(which(is.na(house_df_num$GARAGE)))
+
+# Print the updated column
+print(house_df_num$GARAGE)
+
+dim(house_df_num)
+str(house_df_num)
+summary(house_df_num)
+
+#View(house_df_num)
+
+```
+```{r}
+summary(house_df_num)
+```
+
+
+```{r}
+pairs(house_df_num)
+
+```
+
+```{r}
+cor(house_df_num)
+```
+
+```{r}
+# library(corrplot)
+# corrplot(cor(df), method = "color", col = colorRampPalette(c("white", "blue")), type = "upper", order = "hclust", addCoef.col = "black", tl.col = "black", tl.srt = 45, diag = FALSE)
+corrplot(cor(house_df_num), method = "circle")
+
+```
+```{r}
+corrgram(house_df_num, order=TRUE,
+         upper.panel=panel.pie)
+```
+```{r}
+
+ggplot(house_df_num,aes(FLOOR_AREA,PRICE))+geom_boxplot()
+
+ggplot(house_df_num,aes(FLOOR_AREA,PRICE))+
+  geom_point(color="steelblue")+
+  geom_smooth(method = "lm",formula = y~x)
+
+
+```
+
+
+```{r}
+FLOOR_AREA_PRICEIn.lm <- lm(PRICE ~ FLOOR_AREA, data = house_df_num) # Fit linear model and store into object
+plot(PRICE ~ FLOOR_AREA, data = house_df_num, ylab = "House Price", 
+     xlab = "FLOOR AREA ")
+abline(FLOOR_AREA_PRICEIn.lm$coefficient,, col = "blue")
+
+```
+```{r}
+dim(house_df_num)
+str(house_df_num)
+summary(house_df_num)
+```
+
+```{r}
+
+# Identify outlier indices for prices and bedrooms
+# outlier_prices <- boxplot.stats(house_df_num$PRICE)$out
+# outlier_prices
+# outlier_FLOOR_AREA <- boxplot.stats(house_df_num$FLOOR_AREA)$out
+# outlier_FLOOR_AREA
+
+
+# Remove rows with outlier values
+# house_df_num <- house_df_num[!house_df_num$PRICE %in% outlier_prices, ]
+# house_df_num <- house_df_num[!house_df_num$FLOOR_AREA %in% outlier_FLOOR_AREA, ]
+
+
+
+
+# Function to detect and remove outliers using IQR
+remove_outliers <- function(x) {
+  q1 <- quantile(x, 0.25, na.rm = TRUE)
+  q3 <- quantile(x, 0.75, na.rm = TRUE)
+  iqr <- q3 - q1
+  lower <- q1 - 1.5 * iqr
+  upper <- q3 + 1.5 * iqr
+  x[x < lower | x > upper] <- NA
+  return(x)
+}
+
+# Apply the remove_outliers function to each numerical column
+house_df_num <- lapply(house_df_num, remove_outliers)
+
+# Convert the cleaned list back to a dataframe
+house_df_num <- as.data.frame(house_df_num)
+
+# Remove rows with any NA values
+house_df_num <- house_df_num[complete.cases(house_df_num), ]
+
+
+dim(house_df_num)
+str(house_df_num)
+```
+```{r}
+summary(house_df_num)
+```
+
+
+```{r}
+plot(PRICE ~ FLOOR_AREA, data = house_df_num, ylab = "House Price", 
+     xlab = "FLOOR AREA (m^2)") # remove the outlier
+abline(FLOOR_AREA_PRICEIn.lm$coefficients, col = "blue") # plot the original line
+FLOOR_AREA_PRICEOut.lm <- lm(PRICE ~ FLOOR_AREA, data = house_df_num) # Fit model without outlier
+abline(FLOOR_AREA_PRICEOut.lm$coefficients, col = "red") # plot new line
+```
+```{r}
+FLOOR_AREA_PRICEIn.lm
+```
+```{r}
+FLOOR_AREA_PRICEOut.lm
+```
+```{r}
+summary(FLOOR_AREA_PRICEIn.lm)
+summary(FLOOR_AREA_PRICEOut.lm)
+```
+```{r}
+confint(FLOOR_AREA_PRICEOut.lm)
+```
+```{r}
+anova(FLOOR_AREA_PRICEOut.lm)
+```
+```{r}
+sresid <- rstandard(FLOOR_AREA_PRICEOut.lm)
+sresid
+
+```
+
+```{r}
+par(pty = "s")
+qqnorm(sresid, col = "royalblue")
+qqline(sresid)
+```
+
+```{r}
+plot(sresid ~ FLOOR_AREA_PRICEOut.lm$fitted, xlab = "fitted values") # remove the first observation corresponding to the outlier
+
+# add some guidlines
+abline(h = seq(-2, 2), lty = 2)
+abline(h = 0)
+```
+```{r}
+par(mfrow=c(2,2))
+plot(FLOOR_AREA_PRICEOut.lm)
+```
+```{r}
+ggplot(house_df_num, aes(x = factor(BEDROOMS), y = PRICE, fill = factor(BATHROOMS))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~BEDROOMS) +
+  labs(title = "Price of house per bedroom and bathroom",
+       x = "BEDROOMS",
+       y = "Price of the House",
+       fill = "BATHROOMS") +
+  scale_fill_discrete(name = "BATHROOMS")
+```
+```{r}
+ggplot(house_df_num, aes(x = factor(BEDROOMS), y = PRICE)) +
+  geom_point(aes(size = LAND_AREA, color = factor(BATHROOMS) )) +
+  facet_wrap(~ BEDROOMS) +
+  labs(title = "Price by  Land Area, Bathrooms, and Bedrooms",
+       x = "BEDROOMS",
+       y = "Price",
+       size = "Land Area",
+       color = "Bathrooms") +
+  scale_color_discrete(name = "Bathrooms") +
+  theme_bw()
+```
+```{r}
+pairs(~PRICE+CBD_DIST+FLOOR_AREA+BATHROOMS+BEDROOMS,data=house_df_num)
+```
+
+```{r}
+library(leaps)
+AllSubsets <- regsubsets(PRICE ~ ., nvmax = 10, data = house_df_num)
+AllSubsets.summary <- summary(AllSubsets)
+
+# Display the best solution
+best_solution <- AllSubsets.summary$outmat
+best_solution
+
+# AllSubsets <- regsubsets(PRICE ~ ., nvmax = 10, data = house_df_num) # nbest = 2 would give top 2 for each 
+# AllSubsets.summary <- summary(AllSubsets)
+# AllSubsets.summary$outmat
+#knitr::kable(AllSubsets.summary$outmat)
+```
+```{r}
+par(mfrow = c(1, 3))
+par(cex.axis = 1.5)
+par(cex.lab = 1.5)
+plot(1:8, AllSubsets.summary$adjr2, xlab = "subset size", ylab = "adjusted R-squared", type = "b", log = "y")
+plot(1:8, AllSubsets.summary$cp, xlab = "subset size", ylab = "Mallows' Cp", type = "b", log = "y")
+plot(1:8, AllSubsets.summary$bic - min(AllSubsets.summary$bic) + 0.1, xlab = "subset size", ylab = "BIC", type = "b", log = "y")
+```
+
+
+```{r}
+set.seed(1)
+train_indices <- sample(nrow(house_df_num), nrow(house_df_num) * 0.8)  # Randomly select 80% of indices for training
+housing_train <- house_df_num[train_indices, ]  # Create training dataset
+housing_test <- house_df_num[-train_indices, ]  # Create testing dataset
+
+```
+
+```{r}
+#Housing Train
+dim(housing_train)
+str(housing_train)
+summary(housing_train)
+```
+```{r}
+#Housing Test
+dim(housing_test)
+str(housing_test)
+summary(housing_test)
+```
+
+
+```{r}
+selected_vars <- c("PRICE", "BEDROOMS", "BATHROOMS", "GARAGE", "LAND_AREA", "FLOOR_AREA", "CBD_DIST", "NEAREST_STN_DIST", "NEAREST_SCH_DIST")
+
+# Subset the data frame with the selected variables
+subset_df <- housing_train[,selected_vars]
+
+# Calculate the correlation matrix
+correlation_matrix <- cor(subset_df)
+
+
+
+#correlation_matrix <- cor(house_df_num)
+
+# Create correlation plot
+# corrplot(correlation_matrix, method = "color", col = colorRampPalette(c("white", "blue")), 
+#          type = "upper", order = "hclust", addCoef.col = "black", tl.col = "black", 
+#          tl.srt = 45, diag = FALSE)
+
+# Calculate correlation matrix
+#correlation_matrix <- cor(housing_train)
+
+# Convert correlation matrix to long format
+correlation_data <- reshape2::melt(correlation_matrix)
+
+# Create correlation plot with rotated x-axis labels
+ggplot(data = correlation_data, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  labs(title = "Correlation Plot") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+```{r}
+Model_all<-lm(PRICE~., data = housing_train)
+summary(Model_all)
+```
+
+
+```{r}
+has_na_garage <- any(is.na(housing_train$GARAGE))
+has_na_garage
+```
+## While checking upon GARAGE column, it doesn't have NA values but NA values seen in coefficient output is due to the multicollinearity between the variables so, GARAGE is removed and regression anlaysis is performed again.
+
+```{r}
+Model_NAG<-lm(PRICE~FLOOR_AREA+CBD_DIST+BEDROOMS+BATHROOMS+POSTCODE+NEAREST_SCH_DIST+NEAREST_STN_DIST, data = housing_train)
+summary(Model_NAG)
+```
+# Converted POSTCODE variable from int to categorical using as.factor function and visualising the coefficient.
+
+```{r}
+house_df_num$POSTCODE <- as.factor(house_df_num$POSTCODE)
+set.seed(1)
+train_indices <- sample(nrow(house_df_num), nrow(house_df_num)*0.8)  # Randomly select 80% of indices for training
+housing_train <- house_df_num[train_indices, ]  # Create training dataset
+housing_test <- house_df_num[-train_indices, ]  # Create testing dataset
+
+```
+
+```{r}
+#Housing Train
+dim(housing_train)
+str(housing_train)
+summary(housing_train)
+
+
+```
+```{r}
+#Housing Test
+dim(housing_test)
+str(housing_test)
+summary(housing_test)
+```
+
+
+
+```{r}
+
+Model_new<-lm(PRICE~FLOOR_AREA+CBD_DIST+BEDROOMS+BATHROOMS+POSTCODE+NEAREST_SCH_DIST+NEAREST_STN_DIST,data=housing_train)
+
+summary(Model_new,type = "text")
+
+
+```
+
+
+
+
+# there is  significant change in R-squared value compared to the model in which the POSTCODE column changed to categorical variable. For that we accept this new model
+
+```{r}
+housing_test$pred <- predict(Model_new, housing_test)
+#View(data.frame(housing_test$pred))
+
+hist(housing_test$pred, xlab="Predicted Value", main = "Predicted Values in training data")
+```
+```{r}
+plot(Model_new)
+```
+```{r}
+library(MLmetrics)
+
+RMSE(y_pred = housing_test$pred, y_true = housing_test$PRICE)
+```
+#The RMSE result quit small, it’s mean the model has enough good to predict.
+```{r}
+hist(Model_all$residuals)
+```
+```{r}
+shapiro.test(x = Model_all$residuals[3:5000])
+```
+#The Shapiro-Wilk normality test on the subset of residuals (Model_all$residuals[3:5000]) resulted in a test statistic of W = 1 and an extremely small p-value (< 2e-16), indicating strong evidence against the null hypothesis of normality. Therefore, we can conclude that the subset of residuals does not follow a normal distribution.
+
+
+#Model has normal distribution and p-value < 0.05
+```{r}
+plot(Model_new$fitted.values, Model_new$residuals)
+abline(h = 0, col = "red")
+shapiro.test(x = Model_all$residuals[3:5000])
+```
+```{r}
+library(lmtest)
+
+bptest(Model_new)
+
+```
+#p-value less then 0.05 conclude that heteroscedasticity is present in the regression model
+
+#The studentized Breusch-Pagan test on Model_all resulted in a test statistic of BP = 1383.9, with degrees of freedom (df) equal to 97, and an extremely small p-value (< 2e-16). This indicates strong evidence against the null hypothesis of homoscedasticity, suggesting the presence of heteroscedasticity in the residuals of the model.
+
+#The null hypothesis of homoscedasticity in regression analysis is that the error terms (residuals) have constant variance across all levels of the predictor variables. In other words, it assumes that the spread of the residuals is the same for all values of the predictors.
+```{r}
+
+library(car)
+
+vif(Model_all)
+
+```
+# The error message "there are aliased coefficients in the model" suggests that there is perfect multicollinearity or linear dependence among the predictors in our model Model_all.
+
+#To resolve this issue, We need to identify and remove one or more predictors that are causing the multicollinearity.
+
+
+# Removed NEAREST_STN_DIST and analysing the coffecient.
+```{r}
+Model_FIX<-lm(PRICE~FLOOR_AREA+CBD_DIST+BEDROOMS+BATHROOMS+POSTCODE+NEAREST_SCH_DIST, data = housing_train)
+summary(Model_FIX)
+
+```
+```{r}
+housing_test$pred <- predict(Model_FIX, housing_test)
+View(data.frame(housing_test$pred))
+
+hist(housing_test$pred, xlab="Predicted Value", main = "Predicted Values in training data")
+```
+```{r}
+plot(Model_FIX)
+```
+```{r}
+library(MLmetrics)
+
+RMSE(y_pred = housing_test$pred, y_true = housing_test$PRICE)
+```
+```{r}
+hist(Model_new$residuals)
+
+```
+```{r}
+
+shapiro.test(x = Model_FIX$residuals[3:5000])
+```
+```{r}
+
+plot(Model_FIX$fitted.values, Model_FIX$residuals)
+abline(h = 0, col = "red")
+```
+```{r}
+
+library(lmtest)
+
+bptest(Model_FIX)
+```
+```{r}
+library(car)
+
+vif(Model_FIX)
+```
+# Multicollinearity exists on POSTCODE and CBD_DIST so, It needs to be further analysed by removing either of the columns.
+
+# Removing CBD_DIST and analysing the regression coefficient.
+
+```{r}
+Model_FIX1<-lm(PRICE~FLOOR_AREA+BEDROOMS+BATHROOMS+POSTCODE+NEAREST_SCH_DIST+NEAREST_STN_DIST, data = housing_train)
+summary(Model_FIX1)
+```
+```{r}
+par(mfrow=c(2,2))
+plot(Model_FIX1)
+```
+
+```{r}
+hist(Model_FIX1$residuals)
+RMSE(y_pred = housing_test$pred, y_true = housing_test$PRICE)
+```
+
+```{r}
+shapiro.test(x = Model_FIX1$residuals[3:5000])
+```
+
+```{r}
+library(lmtest)
+
+bptest(Model_FIX1)
+```
+
+```{r}
+vif(Model_FIX1)
+```
+
+Generally, VIF values below 5 indicate low multicollinearity, so based on these values, there is no significant multicollinearity issue among the predictor variables in the model.
+
+From the results of the tests that have been carried out, the model is declared to have passed the test.
+
+
+
+
+
+```{r}
+library(rpart)
+set.seed(123)
+
+fit_tree<-rpart(PRICE~.,data = housing_train,parms = list(split="information"))
+
+
+fit_tree$cptable
+
+plotcp(fit_tree)
+
+fit_tree_pruned<-prune(fit_tree,cp=0.01)
+library(rpart.plot)
+prp(fit_tree_pruned,main="Decision Tree")
+
+fit_tree_pruned_pred<-predict(fit_tree_pruned,housing_test)
+RMSE(y_pred = fit_tree_pruned_pred, y_true = housing_test$PRICE)
+
+
+```
+
+
+
+
+```{r}
+
+library(randomForest)
+fit_forest<-randomForest(PRICE~FLOOR_AREA+BEDROOMS+BATHROOMS+NEAREST_SCH_DIST+NEAREST_STN_DIST,data =housing_train ,na.action = na.roughfix,importance=TRUE)
+
+fit_forest
+importance(fit_forest)
+
+forest_pred<-predict(fit_forest,data=housing_test)
+
+```
+```{r}
+RMSE(y_pred = forest_pred, y_true = housing_test$PRICE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

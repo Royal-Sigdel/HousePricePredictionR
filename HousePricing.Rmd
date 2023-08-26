@@ -1,0 +1,82 @@
+---
+title: "hprice"
+output: html_document
+date: "2023-05-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+data<- read.csv("all_perth_310121.csv", header = TRUE, na = "NULL")
+
+head(data)
+
+# Find columns with duplicate values
+duplicate_cols <- apply(data, 2, function(x) any(duplicated(x)))
+
+# Get column names with duplicate values
+duplicate_col_names <- names(data)[duplicate_cols]
+duplicate_col_names
+
+data <- data[!duplicated(data$ADDRESS), ]  # Remove duplicated rows based on the 'ADDRESS' column
+row.names(data) <- data$ADDRESS    #indexing
+
+data$ADDRESS <- NULL
+
+
+View(data)
+
+r<-data["1 Acorn Place",]
+r
+
+data_no_na <- data[complete.cases(hprice),]
+
+col1<- colnames(data_no_na)
+col1
+
+
+char_coldata <- hprice[which(is.na(data_no_na)), names(data_no_na) %in% col1]
+char_coldata
+
+data_no_na <- data_no_na[which(!is.na(data_no_na)), names(data_no_na) %in% col1]
+View(data_no_na)
+
+
+
+col<-sapply(data_no_na, is.character)
+col
+
+character_columns <- names(data_no_na)[col]
+character_columns
+
+column_positions <- which(names(data_no_na) %in% character_columns)
+column_positions
+
+df<-data_no_na[,-c(column_positions)]
+df
+
+
+
+
+# Number <- ncol(data_no_na)
+# Number
+# # Subset_hprice <- subset(data_no_na, subset = data_no_na$ADDRESS & data_no_na$SUBURB & data_no_na$NEAREST_STN & data_no_na$NEAREST_SCH)
+# # Subset_hprice
+# 
+# colmean<-apply(df,2,mean)
+# colmean
+# 
+# no_col = df[["BEDROOMS"]]
+# no_col
+# n0 <- df[["BATHROOMS"]]
+# n0
+# str(df)
+# checkmean<- tapply(X = df, INDEX = list(BEDROOMS,BATHROOMS), FUN = mean)
+# checkmean
+
+
+
+```
+
